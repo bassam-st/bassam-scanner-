@@ -35,8 +35,8 @@ object CsvExporter {
     }
 
     private fun escape(s: String): String {
-        val needsQuotes = s.contains(",") || s.contains("\n") || s.contains(""")
-        val v = s.replace(""", """")
-        return if (needsQuotes) ""$v"" else v
+        val needsQuotes = s.contains(",") || s.contains("\n") || s.contains("\"")
+        val v = s.replace("\"", "\"\"")
+        return if (needsQuotes) "\"$v\"" else v
     }
 }
