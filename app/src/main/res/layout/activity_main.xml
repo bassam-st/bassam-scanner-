@@ -4,35 +4,47 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
+    <!-- الكاميرا تملأ المساحة العلوية -->
     <androidx.camera.view.PreviewView
         android:id="@+id/previewView"
         android:layout_width="0dp"
-        android:layout_height="220dp"
+        android:layout_height="0dp"
+        android:keepScreenOn="true"
+        app:implementationMode="performance"
+        app:scaleType="fillCenter"
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"/>
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintBottom_toTopOf="@+id/buttonRow"/>
 
+    <!-- صندوق عرض HS + اسم السلعة فوق الكاميرا -->
     <TextView
         android:id="@+id/txtLive"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:padding="10dp"
-        android:text="النص المقروء سيظهر هنا..."
-        android:textSize="14sp"
-        app:layout_constraintTop_toBottomOf="@id/previewView"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"/>
+        android:layout_margin="12dp"
+        android:padding="12dp"
+        android:text="HS: ...\nItem: ..."
+        android:textSize="16sp"
+        android:textStyle="bold"
+        android:textColor="@android:color/white"
+        android:background="#80000000"
+        app:layout_constraintTop_toTopOf="@id/previewView"
+        app:layout_constraintStart_toStartOf="@id/previewView"
+        app:layout_constraintEnd_toEndOf="@id/previewView"/>
 
+    <!-- شريط الأزرار -->
     <LinearLayout
         android:id="@+id/buttonRow"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
         android:gravity="center"
-        android:padding="8dp"
-        app:layout_constraintTop_toBottomOf="@id/txtLive"
+        android:padding="10dp"
+        android:background="#CC111111"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent">
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintBottom_toTopOf="@+id/recyclerView">
 
         <Button
             android:id="@+id/btnSave"
@@ -44,25 +56,26 @@
             android:id="@+id/btnExport"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginStart="8dp"
+            android:layout_marginStart="10dp"
             android:text="Export CSV"/>
 
         <Button
             android:id="@+id/btnClear"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginStart="8dp"
+            android:layout_marginStart="10dp"
             android:text="Clear All"/>
     </LinearLayout>
 
+    <!-- القائمة في الأسفل (غيّر 200dp حسب رغبتك) -->
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/recyclerView"
         android:layout_width="0dp"
-        android:layout_height="0dp"
+        android:layout_height="200dp"
         android:padding="8dp"
-        app:layout_constraintTop_toBottomOf="@id/buttonRow"
-        app:layout_constraintBottom_toBottomOf="parent"
+        android:background="@android:color/black"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"/>
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent"/>
 
 </androidx.constraintlayout.widget.ConstraintLayout>
