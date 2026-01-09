@@ -4,7 +4,7 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
-    <!-- الكاميرا تملأ المساحة العلوية -->
+    <!-- Preview كبير -->
     <androidx.camera.view.PreviewView
         android:id="@+id/previewView"
         android:layout_width="0dp"
@@ -17,14 +17,14 @@
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintBottom_toTopOf="@+id/buttonRow"/>
 
-    <!-- صندوق عرض HS + اسم السلعة فوق الكاميرا -->
+    <!-- عرض النتائج (3 أصناف) فوق الكاميرا -->
     <TextView
         android:id="@+id/txtLive"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_margin="12dp"
         android:padding="12dp"
-        android:text="HS: ...\nItem: ..."
+        android:text="وجّه الكاميرا على المسودة..."
         android:textSize="16sp"
         android:textStyle="bold"
         android:textColor="@android:color/white"
@@ -33,7 +33,7 @@
         app:layout_constraintStart_toStartOf="@id/previewView"
         app:layout_constraintEnd_toEndOf="@id/previewView"/>
 
-    <!-- شريط الأزرار -->
+    <!-- أزرار التحكم -->
     <LinearLayout
         android:id="@+id/buttonRow"
         android:layout_width="0dp"
@@ -53,6 +53,13 @@
             android:text="Capture / Save"/>
 
         <Button
+            android:id="@+id/btnImport"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="10dp"
+            android:text="Import Image"/>
+
+        <Button
             android:id="@+id/btnExport"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -67,7 +74,7 @@
             android:text="Clear All"/>
     </LinearLayout>
 
-    <!-- القائمة في الأسفل (غيّر 200dp حسب رغبتك) -->
+    <!-- سجل الحفظ (أسفل) -->
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/recyclerView"
         android:layout_width="0dp"
