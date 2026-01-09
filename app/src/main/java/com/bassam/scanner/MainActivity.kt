@@ -2,9 +2,11 @@ package com.bassam.scanner
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
@@ -16,6 +18,9 @@ import com.bassam.scanner.data.ScanEntity
 import com.bassam.scanner.databinding.ActivityMainBinding
 import com.bassam.scanner.ui.ScanAdapter
 import com.bassam.scanner.util.CsvExporter
+import com.google.mlkit.vision.common.InputImage
+import com.google.mlkit.vision.text.TextRecognition
+import com.google.mlkit.vision.text.arabic.ArabicTextRecognizerOptions
 import java.util.concurrent.Executors
 
 class MainActivity : ComponentActivity() {
@@ -25,11 +30,18 @@ class MainActivity : ComponentActivity() {
     private lateinit var db: AppDatabase
     private lateinit var adapter: ScanAdapter
 
-    // آخر إطار OCR مُعالج (فيه HS + الاسم + النص الكامل)
-    private var lastFrame: OcrAnalyzer.OcrFrame? = null
+    private var lastItems: List<OcrFormExtractor.ParsedItem> = emptyList()
+    private var lastRawText: String = ""
+    private var lastSavedKey: String = ""
 
-    // لمنع تكرار الحفظ التلقائي لنفس السطر
-    private var lastAutoSavedKey: String = ""
+    private val recognizer = TextRecognition.getClient(
+        ArabicTextRecognizerOptions.Builder().build()
+    )
+
+    private val pickImageLauncher = registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
+        if (uri == null) return@registerForActivityResult
+        processImageUri(uri)
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -44,14 +56,12 @@ class MainActivity : ComponentActivity() {
         loadData()
 
         binding.btnSave.setOnClickListener { saveCurrent(manual = true) }
-        binding.btnExport.setOnClickListener {
-            // تصدير من قاعدة البيانات
-            CsvExporter.export(this, db.scanDao().getAllSync())
-        }
+        binding.btnImport.setOnClickListener { pickImageLauncher.launch("image/*") }
+        binding.btnExport.setOnClickListener { CsvExporter.export(this, db.scanDao().getAllSync()) }
         binding.btnClear.setOnClickListener {
             db.scanDao().deleteAll()
             loadData()
-            lastAutoSavedKey = ""
+            lastSavedKey = ""
             Toast.makeText(this, "Cleared", Toast.LENGTH_SHORT).show()
         }
 
@@ -93,32 +103,23 @@ class MainActivity : ComponentActivity() {
                 .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                 .build()
 
-            // Analyzer الجديد: يرجع OcrFrame بدل String
             analysis.setAnalyzer(
                 cameraExecutor,
                 OcrAnalyzer(
                     onFrame = { frame ->
                         runOnUiThread {
-                            lastFrame = frame
+                            lastRawText = frame.rawText
+                            lastItems = frame.items
 
-                            // عرض مبسط وثابت (بدون هزّات النص الطويل)
-                            binding.txtLive.text = buildString {
-                                append("HS: ").append(frame.hsCode).append("\n")
-                                append("Item: ").append(frame.itemName)
-                            }
+                            binding.txtLive.text = formatItems(frame.items)
 
-                            // حفظ تلقائي عند الثبات
                             if (frame.shouldAutoSave) {
-                                val key = "${frame.hsCode}|${frame.itemName}"
-                                if (key != lastAutoSavedKey) {
-                                    lastAutoSavedKey = key
-                                    saveFrame(frame, toast = true, manual = false)
-                                }
+                                saveItems(frame.items, frame.rawText, manual = false)
                             }
                         }
                     },
-                    stableFramesNeeded = 8,     // لو تريد ثبات أكثر زِدها (مثلاً 12)
-                    minEmitIntervalMs = 120L    // لو تريد تقليل التحديثات زِدها (مثلاً 200)
+                    stableFramesNeeded = 8,
+                    minEmitIntervalMs = 150L
                 )
             )
 
@@ -130,42 +131,78 @@ class MainActivity : ComponentActivity() {
         }, ContextCompat.getMainExecutor(this))
     }
 
-    /**
-     * حفظ يدوي عند ضغط الزر، أو حفظ تلقائي عند ثبات القراءة
-     */
-    private fun saveCurrent(manual: Boolean) {
-        val frame = lastFrame
-        if (frame == null) {
-            Toast.makeText(this, "No OCR yet", Toast.LENGTH_SHORT).show()
-            return
-        }
-        saveFrame(frame, toast = true, manual = manual)
+    private fun formatItems(items: List<OcrFormExtractor.ParsedItem>): String {
+        if (items.isEmpty()) return "وجّه الكاميرا على المسودة...\nHS: ...\nItem: ..."
+
+        return buildString {
+            items.forEachIndexed { idx, it ->
+                append("${idx + 1}) HS: ${it.hsCode}\n")
+                append("   Item: ${it.itemName}\n")
+            }
+        }.trim()
     }
 
-    private fun saveFrame(frame: OcrAnalyzer.OcrFrame, toast: Boolean, manual: Boolean) {
-        // حماية بسيطة: لا تحفظ إذا لم يتعرف
-        if (frame.hsCode == "N/A" || frame.itemName == "Unknown") {
+    private fun saveCurrent(manual: Boolean) {
+        if (lastItems.isEmpty()) {
+            Toast.makeText(this, "No items detected yet", Toast.LENGTH_SHORT).show()
+            return
+        }
+        saveItems(lastItems, lastRawText, manual = manual)
+    }
+
+    private fun saveItems(items: List<OcrFormExtractor.ParsedItem>, rawText: String, manual: Boolean) {
+        // Filter meaningful rows
+        val good = items.filter { it.hsCode != "N/A" && it.itemName != "Unknown" }
+        if (good.isEmpty()) {
             if (manual) Toast.makeText(this, "Not detected yet", Toast.LENGTH_SHORT).show()
             return
         }
 
-        val entity = ScanEntity(
-            hsCode = frame.hsCode,
-            itemName = frame.itemName,
-            rawText = frame.rawText,
-            createdAt = System.currentTimeMillis()
-        )
+        val key = good.joinToString("|") { "${it.hsCode}:${it.itemName}" }
+        if (key == lastSavedKey) return
+        lastSavedKey = key
 
-        // الأفضل إدخال DB خارج الـ UI Thread
         cameraExecutor.execute {
-            db.scanDao().insert(entity)
-            runOnUiThread {
-                if (toast) {
-                    val msg = if (manual) "Saved (manual): ${frame.hsCode}" else "Auto-saved: ${frame.hsCode}"
-                    Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
-                }
-                loadData()
+            good.forEach { it ->
+                val entity = ScanEntity(
+                    hsCode = it.hsCode,
+                    itemName = it.itemName,
+                    rawText = rawText,
+                    createdAt = System.currentTimeMillis()
+                )
+                db.scanDao().insert(entity)
             }
+
+            runOnUiThread {
+                loadData()
+                val msg = if (manual) "Saved ${good.size} item(s)" else "Auto-saved ${good.size} item(s)"
+                Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    private fun processImageUri(uri: Uri) {
+        try {
+            val image = InputImage.fromFilePath(this, uri)
+            recognizer.process(image)
+                .addOnSuccessListener { result ->
+                    val items = OcrFormExtractor.extractItems(result)
+                    lastRawText = result.text ?: ""
+                    lastItems = items
+                    binding.txtLive.text = formatItems(items)
+
+                    if (items.isNotEmpty()) {
+                        // احفظ يدويًا/تلقائيًا؟ هنا نخليه حفظ يدوي بالزر، لكن تستطيع تغييره لو تريد.
+                        Toast.makeText(this, "Image processed: ${items.size} item(s)", Toast.LENGTH_SHORT).show()
+                    } else {
+                        Toast.makeText(this, "No items found in image", Toast.LENGTH_SHORT).show()
+                    }
+                }
+                .addOnFailureListener {
+                    Toast.makeText(this, "Failed to read image", Toast.LENGTH_SHORT).show()
+                }
+        } catch (e: Exception) {
+            Toast.makeText(this, "Invalid image", Toast.LENGTH_SHORT).show()
         }
     }
 
