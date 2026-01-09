@@ -7,8 +7,11 @@ import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 import java.util.concurrent.atomic.AtomicBoolean
 
-class OcrAnalyzer(private val onText: (String) -> Unit) : ImageAnalysis.Analyzer {
+class OcrAnalyzer(
+    private val onText: (String) -> Unit
+) : ImageAnalysis.Analyzer {
 
+    // نستخدم الـ recognizer الافتراضي (يدعم العربية)
     private val recognizer = TextRecognition.getClient(
         TextRecognizerOptions.DEFAULT_OPTIONS
     )
@@ -16,6 +19,8 @@ class OcrAnalyzer(private val onText: (String) -> Unit) : ImageAnalysis.Analyzer
     private val busy = AtomicBoolean(false)
 
     override fun analyze(image: ImageProxy) {
+
+        // منع تكرار المعالجة في نفس الوقت
         if (!busy.compareAndSet(false, true)) {
             image.close()
             return
@@ -28,8 +33,10 @@ class OcrAnalyzer(private val onText: (String) -> Unit) : ImageAnalysis.Analyzer
             return
         }
 
-        val inputImage =
-            InputImage.fromMediaImage(mediaImage, image.imageInfo.rotationDegrees)
+        val inputImage = InputImage.fromMediaImage(
+            mediaImage,
+            image.imageInfo.rotationDegrees
+        )
 
         recognizer.process(inputImage)
             .addOnSuccessListener { result ->
